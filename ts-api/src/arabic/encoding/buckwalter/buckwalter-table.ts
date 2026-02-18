@@ -1,0 +1,74 @@
+import { CharacterType } from '../../character-type.js';
+import { DiacriticType } from '../../diacritic-type.js';
+import { EncodingTableBase } from '../encoding-table-base.js';
+import { UnicodeType } from '../unicode/unicode-type.js';
+
+export class BuckwalterTable extends EncodingTableBase {
+  static readonly BUCKWALTER_TABLE = new BuckwalterTable();
+
+  private constructor() {
+    super();
+    this.addCharacter(UnicodeType.Hamza, "'", CharacterType.Hamza);
+    this.addItem(UnicodeType.AlifWithHamzaAbove, '>', CharacterType.Alif, DiacriticType.HamzaAbove);
+    this.addItem(UnicodeType.WawWithHamzaAbove, '&', CharacterType.Waw, DiacriticType.HamzaAbove);
+    this.addItem(UnicodeType.AlifWithHamzaBelow, '<', CharacterType.Alif, DiacriticType.HamzaBelow);
+    this.addItem(UnicodeType.YaWithHamzaAbove, '}', CharacterType.Ya, DiacriticType.HamzaAbove);
+    this.addCharacter(UnicodeType.Alif, 'A', CharacterType.Alif);
+    this.addCharacter(UnicodeType.Ba, 'b', CharacterType.Ba);
+    this.addCharacter(UnicodeType.TaMarbuta, 'p', CharacterType.TaMarbuta);
+    this.addCharacter(UnicodeType.Ta, 't', CharacterType.Ta);
+    this.addCharacter(UnicodeType.Tha, 'v', CharacterType.Tha);
+    this.addCharacter(UnicodeType.Jeem, 'j', CharacterType.Jeem);
+    this.addCharacter(UnicodeType.HHa, 'H', CharacterType.HHa);
+    this.addCharacter(UnicodeType.Kha, 'x', CharacterType.Kha);
+    this.addCharacter(UnicodeType.Dal, 'd', CharacterType.Dal);
+    this.addCharacter(UnicodeType.Thal, '*', CharacterType.Thal);
+    this.addCharacter(UnicodeType.Ra, 'r', CharacterType.Ra);
+    this.addCharacter(UnicodeType.Zain, 'z', CharacterType.Zain);
+    this.addCharacter(UnicodeType.Seen, 's', CharacterType.Seen);
+    this.addCharacter(UnicodeType.Sheen, '$', CharacterType.Sheen);
+    this.addCharacter(UnicodeType.Sad, 'S', CharacterType.Sad);
+    this.addCharacter(UnicodeType.DDad, 'D', CharacterType.DDad);
+    this.addCharacter(UnicodeType.TTa, 'T', CharacterType.TTa);
+    this.addCharacter(UnicodeType.DTha, 'Z', CharacterType.DTha);
+    this.addCharacter(UnicodeType.Ain, 'E', CharacterType.Ain);
+    this.addCharacter(UnicodeType.Ghain, 'g', CharacterType.Ghain);
+    this.addCharacter(UnicodeType.Tatweel, '_', CharacterType.Tatweel);
+    this.addCharacter(UnicodeType.Fa, 'f', CharacterType.Fa);
+    this.addCharacter(UnicodeType.Qaf, 'q', CharacterType.Qaf);
+    this.addCharacter(UnicodeType.Kaf, 'k', CharacterType.Kaf);
+    this.addCharacter(UnicodeType.Lam, 'l', CharacterType.Lam);
+    this.addCharacter(UnicodeType.Meem, 'm', CharacterType.Meem);
+    this.addCharacter(UnicodeType.Noon, 'n', CharacterType.Noon);
+    this.addCharacter(UnicodeType.Ha, 'h', CharacterType.Ha);
+    this.addCharacter(UnicodeType.Waw, 'w', CharacterType.Waw);
+    this.addCharacter(UnicodeType.AlifMaksura, 'Y', CharacterType.AlifMaksura);
+    this.addCharacter(UnicodeType.Ya, 'y', CharacterType.Ya);
+    this.addDiacritic(UnicodeType.Fathatan, 'F', DiacriticType.Fathatan);
+    this.addDiacritic(UnicodeType.Dammatan, 'N', DiacriticType.Dammatan);
+    this.addDiacritic(UnicodeType.Kasratan, 'K', DiacriticType.Kasratan);
+    this.addDiacritic(UnicodeType.Fatha, 'a', DiacriticType.Fatha);
+    this.addDiacritic(UnicodeType.Damma, 'u', DiacriticType.Damma);
+    this.addDiacritic(UnicodeType.Kasra, 'i', DiacriticType.Kasra);
+    this.addDiacritic(UnicodeType.Shadda, '~', DiacriticType.Shadda);
+    this.addDiacritic(UnicodeType.Sukun, 'o', DiacriticType.Sukun);
+    this.addDiacritic(UnicodeType.Maddah, '^', DiacriticType.Maddah);
+    this.addDiacritic(UnicodeType.HamzaAbove, '#', DiacriticType.HamzaAbove);
+    this.addItem(UnicodeType.AlifKhanjareeya, '`', null, DiacriticType.AlifKhanjareeya);
+    this.addItem(UnicodeType.AlifWithHamzatWasl, '{', CharacterType.Alif, DiacriticType.HamzatWasl);
+    this.addCharacter(UnicodeType.SmallHighSeen, ':', CharacterType.SmallHighSeen);
+    this.addCharacter(UnicodeType.SmallHighRoundedZero, '@', CharacterType.SmallHighRoundedZero);
+    this.addCharacter(UnicodeType.SmallHighUprightRectangularZero, '"', CharacterType.SmallHighUprightRectangularZero);
+    this.addCharacter(UnicodeType.SmallHighMeemIsolatedForm, '[', CharacterType.SmallHighMeemIsolatedForm);
+    this.addCharacter(UnicodeType.SmallLowSeen, ';', CharacterType.SmallLowSeen);
+    this.addCharacter(UnicodeType.SmallWaw, ',', CharacterType.SmallWaw);
+    this.addCharacter(UnicodeType.SmallYa, '.', CharacterType.SmallYa);
+    this.addCharacter(UnicodeType.SmallHighNoon, '!', CharacterType.SmallHighNoon);
+    this.addCharacter(UnicodeType.EmptyCentreLowStop, '-', CharacterType.EmptyCentreLowStop);
+    this.addCharacter(UnicodeType.EmptyCentreHighStop, '+', CharacterType.EmptyCentreHighStop);
+    this.addCharacter(UnicodeType.RoundedHighStopWithFilledCentre, '%', CharacterType.RoundedHighStopWithFilledCentre);
+    this.addCharacter(UnicodeType.SmallLowMeem, ']', CharacterType.SmallLowMeem);
+    this.addItem(UnicodeType.AlifWithMaddah, '|', CharacterType.Alif, DiacriticType.Maddah);
+    this.addCharacter(null, '/', CharacterType.Placeholder);
+  }
+}
