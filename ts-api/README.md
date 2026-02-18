@@ -66,3 +66,11 @@ Optional environment variables:
 - `SSH_KEY` (default: `../../dev/keys/fasthosts`)
 - `REMOTE_HOST` (default: `admin-user@hunna.app`)
 - `REMOTE_PATH` (default: `/var/www/qurancorpus.app/services`)
+
+### Railway (demo)
+
+After linking/authenticating Railway in this directory, deploy with:
+
+```bash
+npx @railway/cli up -d --service <service-id>
+```
