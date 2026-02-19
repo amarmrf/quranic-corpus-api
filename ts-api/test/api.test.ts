@@ -179,6 +179,8 @@ describe('Quranic Corpus API (TS)', () => {
     expect(body.results[0]).toMatchObject({
       matchField: expect.any(String),
       tokenArabic: expect.any(String),
+      verseArabicTokens: expect.any(Array),
+      matchedTokenIndex: expect.any(Number),
       gloss: expect.any(String)
     });
   });

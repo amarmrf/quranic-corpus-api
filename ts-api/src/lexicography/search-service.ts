@@ -24,6 +24,8 @@ export type SearchResult = {
   location: [number, number, number];
   verseLocation: [number, number];
   tokenArabic: string;
+  verseArabicTokens: string[];
+  matchedTokenIndex: number;
   phonetic: string;
   gloss: string;
   lemmas: LexemeRef[];
@@ -622,10 +624,19 @@ export class SearchService {
 
   private toResult(candidate: SearchCandidate, translationKey: string): SearchResult {
     const token = candidate.token;
+    const verse = this.document.getVerse(token.chapterNumber, token.verseNumber);
+    const verseArabicTokens = verse.tokens.map((verseToken) => toUnicode(verseToken.arabicText));
+    const matchedTokenIndex = Math.max(
+      0,
+      verse.tokens.findIndex((verseToken) => verseToken.location.tokenNumber === token.tokenNumber)
+    );
+
     return {
       location: [token.chapterNumber, token.verseNumber, token.tokenNumber],
       verseLocation: [token.chapterNumber, token.verseNumber],
       tokenArabic: token.tokenArabic,
+      verseArabicTokens,
+      matchedTokenIndex,
       phonetic: token.phonetic,
       gloss: token.gloss,
       lemmas: token.lemmas,
