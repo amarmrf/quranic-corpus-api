@@ -259,6 +259,77 @@ describe('Quranic Corpus API (TS)', () => {
     });
   });
 
+  test('GET /search supports morpheme mode', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/search',
+      query: {
+        q: 'POS:V',
+        mode: 'morpheme',
+        segmentType: 'stem',
+        limit: '10'
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.query.mode).toBe('morpheme');
+    expect(body.results.length).toBeGreaterThan(0);
+    expect(body.results[0]).toMatchObject({
+      matchField: expect.any(String),
+      matchedSegmentType: 'stem',
+      matchedMorphemeTag: expect.any(String)
+    });
+  });
+
+  test('GET /search supports morpheme filters without q', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/search',
+      query: {
+        mode: 'morpheme',
+        feature: 'POS:V',
+        segmentType: 'stem',
+        limit: '10'
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.query.mode).toBe('morpheme');
+    expect(body.query.q).toBe('');
+    expect(body.results.length).toBeGreaterThan(0);
+  });
+
+  test('GET /concordance rejects grouped morpheme mode', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/concordance',
+      query: {
+        q: 'POS:V',
+        mode: 'morpheme',
+        groupBy: 'root'
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain('groupBy=none');
+  });
+
+  test('GET /dictionary rejects morpheme mode', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/dictionary',
+      query: {
+        q: 'POS:V',
+        mode: 'morpheme'
+      }
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain('does not support morpheme mode');
+  });
+
   test('GET /search validates required query', async () => {
     const response = await app.inject({
       method: 'GET',

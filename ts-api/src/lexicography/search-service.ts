@@ -11,9 +11,10 @@ import type { Token } from '../orthography/token.js';
 import type { TranslationService } from '../translation/translation-service.js';
 import { getVerse } from '../translation/translation.js';
 
-export type SearchMode = 'surface' | 'lemma' | 'root' | 'translation';
+export type SearchMode = 'surface' | 'lemma' | 'root' | 'translation' | 'morpheme';
 export type SearchSort = 'relevance' | 'location';
 export type SearchGroupBy = 'none' | 'lemma' | 'root';
+export type MorphemeSegmentType = 'prefix' | 'stem' | 'suffix';
 
 export type LexemeRef = {
   key: string;
@@ -34,6 +35,10 @@ export type SearchResult = {
   morphology: string[];
   verseTranslation: string | null;
   matchField: string;
+  matchedSegmentIndex: number | null;
+  matchedSegmentType: MorphemeSegmentType | null;
+  matchedSegmentArabic: string | null;
+  matchedMorphemeTag: string | null;
 };
 
 export type SearchQuery = {
@@ -49,6 +54,11 @@ export type SearchQuery = {
   offset: number;
   sort: SearchSort;
   groupBy: SearchGroupBy;
+  segmentType: MorphemeSegmentType | null;
+  pos: string | null;
+  lemma: string | null;
+  root: string | null;
+  feature: string | null;
 };
 
 export type SearchResponse = {
@@ -113,7 +123,7 @@ export type DictionaryIndexResponse = {
 };
 
 export type SearchParams = {
-  q: string;
+  q?: string | undefined;
   mode?: SearchMode | undefined;
   translation?: string | undefined;
   chapter?: number | undefined;
@@ -126,6 +136,11 @@ export type SearchParams = {
   sort?: SearchSort | undefined;
   groupBy?: SearchGroupBy | undefined;
   occurrenceLimit?: number | undefined;
+  segmentType?: MorphemeSegmentType | undefined;
+  pos?: string | undefined;
+  lemma?: string | undefined;
+  root?: string | undefined;
+  feature?: string | undefined;
 };
 
 export type DictionaryIndexParams = {
@@ -134,6 +149,23 @@ export type DictionaryIndexParams = {
   contains?: string | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
+};
+
+type IndexedSegment = {
+  segmentIndex: number;
+  segmentType: MorphemeSegmentType;
+  segmentArabic: string;
+  segmentArabicNoDiacritics: string;
+  posTag: string;
+  posTagLower: string;
+  lemmaKey: string | null;
+  lemmaArabic: string | null;
+  lemmaArabicNoDiacritics: string | null;
+  rootKey: string | null;
+  rootArabic: string | null;
+  rootArabicNoDiacritics: string | null;
+  morphology: string;
+  morphologyLower: string;
 };
 
 type IndexedToken = {
@@ -152,12 +184,14 @@ type IndexedToken = {
   roots: LexemeRef[];
   posTags: string[];
   morphology: string[];
+  segments: IndexedSegment[];
 };
 
 type SearchCandidate = {
   token: IndexedToken;
   matchField: string;
   score: number;
+  matchedSegment: IndexedSegment | null;
 };
 
 type GroupAccumulator = {
@@ -172,7 +206,6 @@ type GroupAccumulator = {
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
-const DEFAULT_OCCURRENCE_LIMIT = 50;
 const MAX_OCCURRENCE_LIMIT = 500;
 
 const ARABIC_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g;
@@ -184,6 +217,15 @@ function stripArabicDiacritics(value: string): string {
 function normalizeText(value: string, keepDiacritics: boolean): string {
   const trimmed = value.trim().toLowerCase();
   return keepDiacritics ? trimmed : stripArabicDiacritics(trimmed);
+}
+
+function normalizeOptionalText(value: string | undefined, keepDiacritics: boolean): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return normalizeText(trimmed, keepDiacritics);
 }
 
 function uniqueLexemes(values: LexemeRef[]): LexemeRef[] {
@@ -233,6 +275,10 @@ export class SearchService {
   dictionary(rawParams: SearchParams): DictionaryResponse {
     const started = Date.now();
     const query = this.normalizeQuery(rawParams);
+    if (query.mode === 'morpheme') {
+      throw new Error('Dictionary endpoint does not support morpheme mode.');
+    }
+
     const candidates = this.queryCandidates(query);
     const entryType: 'lemma' | 'root' = query.mode === 'root' ? 'root' : 'lemma';
 
@@ -286,6 +332,10 @@ export class SearchService {
   concordance(rawParams: SearchParams): ConcordanceResponse {
     const started = Date.now();
     const query = this.normalizeQuery(rawParams);
+    if (query.mode === 'morpheme' && query.groupBy !== 'none') {
+      throw new Error('Morpheme mode supports only groupBy=none.');
+    }
+
     const occurrenceLimit = this.normalizeOccurrenceLimit(rawParams.occurrenceLimit);
     const candidates = this.queryCandidates(query);
 
@@ -420,12 +470,25 @@ export class SearchService {
 
   private normalizeQuery(params: SearchParams): SearchQuery {
     const mode = params.mode ?? 'surface';
-    if (!['surface', 'lemma', 'root', 'translation'].includes(mode)) {
+    if (!['surface', 'lemma', 'root', 'translation', 'morpheme'].includes(mode)) {
       throw new Error('Invalid mode.');
     }
 
+    const segmentType = params.segmentType ?? null;
+    if (segmentType != null && !['prefix', 'stem', 'suffix'].includes(segmentType)) {
+      throw new Error('Invalid segmentType value.');
+    }
+
+    const pos = normalizeOptionalText(params.pos, true);
+    const lemma = normalizeOptionalText(params.lemma, false);
+    const root = normalizeOptionalText(params.root, true);
+    const feature = normalizeOptionalText(params.feature, false);
+
     const q = params.q?.trim() ?? '';
-    if (q.length === 0) {
+    const hasMorphemeFilter =
+      segmentType != null || pos != null || lemma != null || root != null || feature != null;
+
+    if (q.length === 0 && !(mode === 'morpheme' && hasMorphemeFilter)) {
       throw new Error('Query parameter q is required.');
     }
 
@@ -463,7 +526,12 @@ export class SearchService {
       limit,
       offset,
       sort,
-      groupBy
+      groupBy,
+      segmentType,
+      pos,
+      lemma,
+      root,
+      feature
     };
   }
 
@@ -480,7 +548,7 @@ export class SearchService {
         continue;
       }
 
-      const match = this.matchToken(token, query.mode, normalizedQuery, query.exact, query.diacritics, query.translation);
+      const match = this.matchToken(token, query, normalizedQuery);
       if (match == null) {
         continue;
       }
@@ -488,7 +556,8 @@ export class SearchService {
       candidates.push({
         token,
         matchField: match.matchField,
-        score: match.score
+        score: match.score,
+        matchedSegment: match.matchedSegment
       });
     }
 
@@ -543,7 +612,8 @@ export class SearchService {
 
   private normalizeOccurrenceLimit(rawOccurrenceLimit?: number): number {
     if (rawOccurrenceLimit == null) {
-      return DEFAULT_OCCURRENCE_LIMIT;
+      // No explicit cap means "all occurrences" for concordance groups.
+      return Number.MAX_SAFE_INTEGER;
     }
 
     if (!Number.isInteger(rawOccurrenceLimit) || rawOccurrenceLimit < 1) {
@@ -555,13 +625,15 @@ export class SearchService {
 
   private matchToken(
     token: IndexedToken,
-    mode: SearchMode,
-    normalizedQuery: string,
-    exact: boolean,
-    diacritics: boolean,
-    translationKey: string
-  ): { matchField: string; score: number } | null {
+    query: SearchQuery,
+    normalizedQuery: string
+  ): { matchField: string; score: number; matchedSegment: IndexedSegment | null } | null {
+    const mode = query.mode;
     const fields: { name: string; value: string }[] = [];
+
+    if (mode === 'morpheme') {
+      return this.matchMorphemeToken(token, query, normalizedQuery);
+    }
 
     if (mode === 'surface') {
       fields.push(
@@ -569,57 +641,163 @@ export class SearchService {
         { name: 'phonetic', value: token.phoneticLower },
         {
           name: 'tokenArabic',
-          value: normalizeText(diacritics ? token.tokenArabic : token.tokenArabicNoDiacritics, true)
+          value: normalizeText(query.diacritics ? token.tokenArabic : token.tokenArabicNoDiacritics, true)
         }
       );
     } else if (mode === 'lemma') {
       for (const lemma of token.lemmas) {
         fields.push(
           { name: 'lemmaKey', value: normalizeText(lemma.key, true) },
-          { name: 'lemmaArabic', value: normalizeText(lemma.arabic, diacritics) }
+          { name: 'lemmaArabic', value: normalizeText(lemma.arabic, query.diacritics) }
         );
       }
     } else if (mode === 'root') {
       for (const root of token.roots) {
         fields.push(
           { name: 'rootKey', value: normalizeText(root.key, true) },
-          { name: 'rootArabic', value: normalizeText(root.arabic, diacritics) }
+          { name: 'rootArabic', value: normalizeText(root.arabic, query.diacritics) }
         );
       }
     } else {
-      const verseTranslation = this.getVerseTranslation(translationKey, token.verseSequenceNumber) ?? '';
+      const verseTranslation = this.getVerseTranslation(query.translation, token.verseSequenceNumber) ?? '';
       fields.push({ name: 'verseTranslation', value: normalizeText(verseTranslation, true) });
     }
 
-    let bestMatch: { matchField: string; score: number } | null = null;
+    let bestMatch: { matchField: string; score: number; matchedSegment: IndexedSegment | null } | null = null;
 
     for (const field of fields) {
-      if (field.value.length === 0) {
+      const score = this.getTextMatchScore(field.value, normalizedQuery, query.exact);
+      if (score === 0) {
         continue;
       }
 
-      if (exact) {
-        if (field.value !== normalizedQuery) {
-          continue;
-        }
-
-        bestMatch = { matchField: field.name, score: 3 };
-        break;
-      }
-
-      const contains = field.value.includes(normalizedQuery);
-      if (!contains) {
-        continue;
-      }
-
-      const startsWith = field.value.startsWith(normalizedQuery);
-      const score = startsWith ? 2 : 1;
       if (bestMatch == null || score > bestMatch.score) {
-        bestMatch = { matchField: field.name, score };
+        bestMatch = { matchField: field.name, score, matchedSegment: null };
       }
     }
 
     return bestMatch;
+  }
+
+  private matchMorphemeToken(
+    token: IndexedToken,
+    query: SearchQuery,
+    normalizedQuery: string
+  ): { matchField: string; score: number; matchedSegment: IndexedSegment | null } | null {
+    let bestMatch: { matchField: string; score: number; matchedSegment: IndexedSegment | null } | null = null;
+
+    for (const segment of token.segments) {
+      if (!this.matchesMorphemeFilters(segment, query)) {
+        continue;
+      }
+
+      const fields: { name: string; value: string }[] = [
+        { name: 'segmentMorphology', value: segment.morphologyLower },
+        {
+          name: 'segmentArabic',
+          value: normalizeText(
+            query.diacritics ? segment.segmentArabic : segment.segmentArabicNoDiacritics,
+            true
+          )
+        },
+        { name: 'segmentPosTag', value: segment.posTagLower },
+        { name: 'segmentLemmaKey', value: segment.lemmaKey != null ? normalizeText(segment.lemmaKey, true) : '' },
+        {
+          name: 'segmentLemmaArabic',
+          value:
+            segment.lemmaArabic != null
+              ? normalizeText(query.diacritics ? segment.lemmaArabic : (segment.lemmaArabicNoDiacritics ?? ''), true)
+              : ''
+        },
+        { name: 'segmentRootKey', value: segment.rootKey != null ? normalizeText(segment.rootKey, true) : '' },
+        {
+          name: 'segmentRootArabic',
+          value:
+            segment.rootArabic != null
+              ? normalizeText(query.diacritics ? segment.rootArabic : (segment.rootArabicNoDiacritics ?? ''), true)
+              : ''
+        }
+      ];
+
+      for (const field of fields) {
+        const score = this.getTextMatchScore(field.value, normalizedQuery, query.exact);
+        if (score === 0) {
+          continue;
+        }
+
+        if (bestMatch == null || score > bestMatch.score) {
+          bestMatch = { matchField: field.name, score, matchedSegment: segment };
+        }
+      }
+    }
+
+    return bestMatch;
+  }
+
+  private matchesMorphemeFilters(segment: IndexedSegment, query: SearchQuery): boolean {
+    if (query.segmentType != null && segment.segmentType !== query.segmentType) {
+      return false;
+    }
+
+    if (query.pos != null && this.getTextMatchScore(segment.posTagLower, query.pos, query.exact) === 0) {
+      return false;
+    }
+
+    if (query.feature != null && this.getTextMatchScore(segment.morphologyLower, query.feature, query.exact) === 0) {
+      return false;
+    }
+
+    if (query.lemma != null) {
+      const matchesLemmaKey =
+        segment.lemmaKey != null && this.getTextMatchScore(normalizeText(segment.lemmaKey, true), query.lemma, query.exact) > 0;
+      const matchesLemmaArabic =
+        segment.lemmaArabic != null &&
+        this.getTextMatchScore(
+          normalizeText(query.diacritics ? segment.lemmaArabic : (segment.lemmaArabicNoDiacritics ?? ''), true),
+          query.lemma,
+          query.exact
+        ) > 0;
+      if (!matchesLemmaKey && !matchesLemmaArabic) {
+        return false;
+      }
+    }
+
+    if (query.root != null) {
+      const matchesRootKey =
+        segment.rootKey != null && this.getTextMatchScore(normalizeText(segment.rootKey, true), query.root, query.exact) > 0;
+      const matchesRootArabic =
+        segment.rootArabic != null &&
+        this.getTextMatchScore(
+          normalizeText(query.diacritics ? segment.rootArabic : (segment.rootArabicNoDiacritics ?? ''), true),
+          query.root,
+          query.exact
+        ) > 0;
+      if (!matchesRootKey && !matchesRootArabic) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private getTextMatchScore(value: string, normalizedQuery: string, exact: boolean): number {
+    if (value.length === 0) {
+      return 0;
+    }
+
+    if (normalizedQuery.length === 0) {
+      return 1;
+    }
+
+    if (exact) {
+      return value === normalizedQuery ? 3 : 0;
+    }
+
+    if (!value.includes(normalizedQuery)) {
+      return 0;
+    }
+
+    return value.startsWith(normalizedQuery) ? 2 : 1;
   }
 
   private toResult(candidate: SearchCandidate, translationKey: string): SearchResult {
@@ -644,7 +822,11 @@ export class SearchService {
       posTags: token.posTags,
       morphology: token.morphology,
       verseTranslation: this.getVerseTranslation(translationKey, token.verseSequenceNumber),
-      matchField: candidate.matchField
+      matchField: candidate.matchField,
+      matchedSegmentIndex: candidate.matchedSegment?.segmentIndex ?? null,
+      matchedSegmentType: candidate.matchedSegment?.segmentType ?? null,
+      matchedSegmentArabic: candidate.matchedSegment?.segmentArabic ?? null,
+      matchedMorphemeTag: candidate.matchedSegment?.morphology ?? null
     };
   }
 
@@ -667,6 +849,30 @@ export class SearchService {
           const gloss = this.translationService.getTokenTranslation(tokenSequenceNumber);
           const phonetic = this.toPhonetic(token);
           const tokenArabic = toUnicode(token.arabicText);
+          const morphologyWriter = new MorphologyWriter();
+          const indexedSegments: IndexedSegment[] = segments.map((segment, segmentIndex) => {
+            const segmentArabic = segment.arabicText != null ? toUnicode(segment.arabicText) : '';
+            const lemmaArabic = segment.lemma != null ? toUnicode(segment.lemma.arabicText) : null;
+            const rootArabic = segment.root != null ? toUnicode(segment.root) : null;
+            const morphology = morphologyWriter.write(segment);
+
+            return {
+              segmentIndex,
+              segmentType: this.toMorphemeSegmentType(segment.type),
+              segmentArabic,
+              segmentArabicNoDiacritics: stripArabicDiacritics(segmentArabic),
+              posTag: segment.partOfSpeech,
+              posTagLower: normalizeText(segment.partOfSpeech, true),
+              lemmaKey: segment.lemma?.key ?? null,
+              lemmaArabic,
+              lemmaArabicNoDiacritics: lemmaArabic != null ? stripArabicDiacritics(lemmaArabic) : null,
+              rootKey: segment.root != null ? toBuckwalter(segment.root) : null,
+              rootArabic,
+              rootArabicNoDiacritics: rootArabic != null ? stripArabicDiacritics(rootArabic) : null,
+              morphology,
+              morphologyLower: normalizeText(morphology, false)
+            };
+          });
           const posTags = Array.from(
             new Set(
               segments
@@ -674,9 +880,8 @@ export class SearchService {
                 .filter((value): value is NonNullable<typeof value> => value != null && value.length > 0)
             )
           );
-          const morphologyWriter = new MorphologyWriter();
-          const morphology = segments
-            .map((segment) => morphologyWriter.write(segment))
+          const morphology = indexedSegments
+            .map((segment) => segment.morphology)
             .filter((value): value is string => value != null && value.length > 0);
 
           indexed.push({
@@ -694,7 +899,8 @@ export class SearchService {
             lemmas,
             roots,
             posTags,
-            morphology
+            morphology,
+            segments: indexedSegments
           });
         }
       }
@@ -711,6 +917,17 @@ export class SearchService {
       },
       token.arabicText
     );
+  }
+
+  private toMorphemeSegmentType(segmentType: Segment['type']): MorphemeSegmentType {
+    switch (segmentType) {
+      case 'Prefix':
+        return 'prefix';
+      case 'Suffix':
+        return 'suffix';
+      default:
+        return 'stem';
+    }
   }
 
   private extractLemmas(segments: Segment[]): LexemeRef[] {
